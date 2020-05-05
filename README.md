@@ -1,7 +1,7 @@
-RussianTatarTranslator
+TatarTopicModeler
 ==============================
 
-Russian-Tatar and Tatar-Russian translator. Project for NLP&ML course at Innopolis University.
+Topic modeling in Tatar language. Project for NLP&ML course at Innopolis University.
 
 Project Organization
 ------------
