@@ -11,18 +11,19 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import LatentDirichletAllocation as LDA
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
-from src.visualization.visualize import plot_scatter
+from collections import OrderedDict, Counter
+from src.models.topic_modeler import TopicModeler
+from src.visualization.visualize import plot_hist
 from src.data.preprocess import preprocess, STOPWORDS
 
 SEED = 5
-TOPICS = 6
+TOPICS = 5
 
 
-def main(df, use_true=False):
-    documents = df['preproc']
-    names = df['title']
-    true_labels_map = dict([(x, i) for i, x in enumerate(set(df['topic']))])
-    true_labels = [true_labels_map[x] for x in df['topic']]
+def plot(vect_model, names, true_labels, use_true=False):
+    true_label_to_id = OrderedDict([(x, i) for i, x in enumerate(sorted(set(true_labels)))])
+    true_id_to_label = OrderedDict([(i, x) for i, x in enumerate(sorted(set(true_labels)))])
+    true_labels = np.array([true_label_to_id[x] for x in true_labels])
 
     lda = LDA(n_components=TOPICS,
               max_iter=30,
@@ -31,18 +32,18 @@ def main(df, use_true=False):
               # verbose=1,
               random_state=SEED,
               learning_decay=0.7)
-    tSNE = TSNE(n_components=2,
-                # perplexity=50,
-                n_jobs=-1,
-                random_state=SEED)
 
-    term_doc_matrix = vect_model.transform(documents)
-    embeddings = lda.fit_transform(term_doc_matrix)
+    data_vectorized = vect_model.fit_transform(documents.values.astype('U'))
+    embeddings = lda.fit_transform(data_vectorized)
 
-    for metric in ["cosine"]:  # + ["euclidean", "manhattan"]:
-        print('=' * 20)
-        print(metric)
+    for metric in ['cosine', 'euclidean', 'manhattan']:
         X = StandardScaler().fit_transform(embeddings)
+
+        tSNE = TSNE(n_components=2,
+                    metric=metric,
+                    perplexity=30,
+                    n_jobs=-1,
+                    random_state=SEED)
         ac = AgglomerativeClustering(n_clusters=TOPICS,
                                      linkage='average',
                                      affinity=metric
@@ -54,73 +55,79 @@ def main(df, use_true=False):
 
         labels_variants = [
             ('LDA labels', lda_labels, X),
-            ('CLUSTERING labels', clust_labels, X)
+            # ('CLUSTERING labels', clust_labels, X)
         ]
         for name, labels, X in labels_variants:
-            print(name)
+            print('=' * 20)
+            print(name, metric)
             print("Silhouette Coefficient: %0.3f" % metrics.silhouette_score(X, labels, metric=metric), '\n')
-            X = tSNE.fit_transform(embeddings)
+            X = tSNE.fit_transform(X)
 
-            draw_df = pd.DataFrame()
-            draw_df['x'] = X[:, 0]
-            draw_df['y'] = X[:, 1]
             if use_true:
-                draw_df['label'] = true_labels
+                unique_labels = set(true_labels)
+                labels = true_labels
+                id_to_label = true_id_to_label
             else:
-                draw_df['label'] = labels
-            draw_df['Name'] = names
+                unique_labels = set(labels)
+                id_to_label = dict([(i, i) for i in range(len(unique_labels))])
 
-            # fig = px.scatter(draw_df, x='x', y='y', color='label', hover_data=['Name'], title=f'{name}. TOPICS: {TOPICS}')
-
-            fig = go.Figure(data=go.Scatter(
-                x=draw_df['x'],
-                y=draw_df['y'],
-                mode='markers',
-                marker_color=draw_df['label'],
-                text=draw_df['Name'],
-                marker={'size': 10,
-                        'symbol': 'circle-dot'},
-            ))
-
-            """
-            unique_labels = set(labels)
             fig = go.Figure()
             for k in unique_labels:
                 class_member_mask = (labels == k)
-                xy = X[class_member_mask] 
+                xy = X[class_member_mask]
                 _ = fig.add_trace(go.Scatter(x=xy[:, 0], y=xy[:, 1],
                                              mode='markers',
-                                             name=str(k),
-                                             marker={'size': 12, 
+                                             name=id_to_label[k],
+                                             marker={'size': 12,
                                                      'symbol': 'circle-dot'},
+                                             hovertext=np.array(names)[class_member_mask]
                                              ))
-            """
 
-            _ = fig.update_layout(title=f'{name}. TOPICS: {TOPICS}. True labels: {use_true}',
+            _ = fig.update_layout(title=f'{name}. TOPICS: {TOPICS}. Metric: {metric}. True labels: {use_true}',
                                   xaxis_title='x',
                                   yaxis_title='y',
                                   width=1000,
                                   height=1000,
+                                  showlegend=True,
                                   coloraxis={'colorscale': 'viridis'})
             fig.show()
 
 
-PATH = Path(os.getcwd())
-df = pd.read_csv(PATH / 'data/raw/total.csv', sep=',')
-print(df.columns)
-true_labels = df['topic']
-documents = df['title'] + ' ' + df['content']
-if 'preproc' not in df.columns:
-    documents = preprocess(documents.values, stem=True, lemm=False)
-    df['preproc'] = documents
-    df.to_csv(PATH / 'data/raw/total.csv', sep=',')
+def topics_distribution(documents, vect_model):
+    lda = LDA(n_components=TOPICS,
+              max_iter=30,
+              n_jobs=6,
+              learning_method='batch',
+              # verbose=1,
+              random_state=SEED,
+              learning_decay=0.7)
 
+    data_vectorized = vect_model.fit_transform(documents.values.astype('U'))
+    lda.fit(data_vectorized)
+    topic_modeler = TopicModeler(vect_model, lda)
+    prob = [topic_modeler(doc) for doc in documents]
+    most_prob = [np.argmax(x) for x in prob]
+    plot_hist(most_prob, 'Topics distribution', size=(700, 500))
+    most_prob_cnt = Counter(most_prob)
+    print(most_prob_cnt)
+
+
+PATH = Path(os.getcwd())
+filename = 'total.csv'
+if filename in os.listdir(PATH / 'data/processed'):
+    df = pd.read_csv(PATH / 'data/processed' / filename)
+else:
+    df = pd.read_csv(PATH / 'data/raw' / filename)
+    df['preproc'] = preprocess(df['content'].values, stem=True, lemm=False)
+    df.to_csv(PATH / 'data/interim/total.csv')
 df.dropna(inplace=True)
+df = df[df['topic'] != 'personas']  # remove articles about personas
+df = df[df['title'].str.len() > 1]  # remove articles about letters
 documents = df['preproc']
 
 count_vect = CountVectorizer(input='content', stop_words=STOPWORDS)
 tf_idf_vect = TfidfVectorizer(input='content', stop_words=STOPWORDS)
 vect_model = count_vect
-data_vectorized = vect_model.fit_transform(documents)
 
-main(df, use_true=True)
+# plot(vect_model, df['title'], df['topic'], use_true=True)
+topics_distribution(documents, vect_model)
