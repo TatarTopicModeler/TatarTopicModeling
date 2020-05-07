@@ -30,11 +30,59 @@ russian_stemmer = SnowballStemmer('russian')
 english_stemmer = SnowballStemmer('english')
 
 EN_ALPHA_REGEX = r'a-z'
-# RUSSIAN_ALPHA = r'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
+RU_ALPHA_REGEX = r'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
 TT_ALPHA_REGEX = r'аәбвгдеёжҗзийклмнңоөпрстуүфхһцчшщъыьэюя'
-ALPHA_REGEX = EN_ALPHA_REGEX + TT_ALPHA_REGEX
+TT_LATIN_ALPHA_REGEX = r'abcdefghijklmnopqrstuvwxyzäççñöüüğışş'
+ALPHA_REGEX = EN_ALPHA_REGEX + TT_ALPHA_REGEX + RU_ALPHA_REGEX + EN_ALPHA_REGEX
 
 PUNCT = r'''!"#$%&\'()*+,-./:;<=>?@\\][^_`{|}~«»—“”•'''  # punctuation marks
+
+TRANSLIT_RULES = {
+    'ts': 'ц',
+    'yü': 'ю',
+    'yu': 'ю',
+    'ya': 'я',
+    'yä': 'я',
+    'eu': 'ев',
+    'ye': 'е',
+    'yı': 'е',
+    'şç': 'щ',
+    'a': 'а',
+    'b': 'б',
+    'ç': 'ч',
+    'c': 'җ',
+    'd': 'д',
+    'e': 'е',
+    'ä': 'ә',
+    'f': 'ф',
+    'g': 'г',
+    'ğ': 'г',
+    'h': 'һ',
+    'i': 'и',
+    'y': 'й',
+    'k': 'к',
+    'l': 'л',
+    'm': 'м',
+    'n': 'н',
+    'ñ': 'ң',
+    'o': 'о',
+    'ö': 'ө',
+    'p': 'п',
+    'q': 'к',
+    'r': 'р',
+    's': 'с',
+    'ş': 'ш',
+    't': 'т',
+    'u': 'у',
+    'v': 'в',
+    'w': 'в',
+    'x': 'х',
+    'ü': 'ү',
+    'z': 'з',
+    'j': 'ж',
+    'ı': 'ы',
+    '\'': '',  # (э, ъ, ь)
+}
 
 
 def remove_stress(text, ignore='йё'):
@@ -44,7 +92,6 @@ def remove_stress(text, ignore='йё'):
 
 
 def normalize(text):
-    text = text.lower()
     text = re.sub(URL_EXP, ' ', text)  # remove URLS
     text = remove_stress(text)  # normalize all chars expect ['й','ё']
     text = re.sub(f'[^{ALPHA_REGEX}]', ' ', text)  # leave only letters
@@ -56,11 +103,22 @@ def is_english(word):
     return sum([int(char in EN_ALPHA_REGEX) for char in word]) >= len(word) // 2
 
 
+def is_latin_tatar(text):
+    return sum([int(char in TT_LATIN_ALPHA_REGEX) for char in text]) >= len(text) * 0.8
+
+
 def stemming(words):  # TODO adapt for tatar (implement a new one or find edit distance with dictionary word
     return [
         english_stemmer.stem(word) if is_english(word) else russian_stemmer.stem(word)
         for word in words
     ]
+
+
+def translit(text):
+    for from_, to_ in TRANSLIT_RULES.items():
+        text = re.sub(f'{from_}', f'{to_}', text)
+
+    return text
 
 
 def lemmatize(text):  # TODO не работает
@@ -72,7 +130,14 @@ def remove_stopwords(words):
 
 
 def preprocess_document(text, stem=False, lemm=False):
+    text = text.lower()
+    if is_latin_tatar(text):
+        print(text)
+        text = translit(text)
+        print(text)
+        print()
     text = normalize(text)
+
     words = nltk.word_tokenize(text)
     words = remove_stopwords(words)
     if stem:
