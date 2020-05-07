@@ -11,16 +11,19 @@ import re
 PATH = Path(os.getcwd())
 PATH_STOPWORDS_TT = Path('data/external/stopwords_tt.csv')  # Stopwords file
 PATH_STOPWORDS_RU = Path('data/external/stopwords_ru.csv')  # Stopwords file (all nltk words are included)
+PATH_STOPWORDS_EN = Path('data/external/stopwords_en.csv')  # Stopwords file (all nltk words are included)
 PATH_STOPWORDS_INTERIM = Path('data/interim/stopwords_dataset.csv')
 
 dataset_stopwords_file = open(PATH_STOPWORDS_INTERIM, 'r')  # Dataset specific stopwords
 
 tt_stopwords = pd.read_csv(PATH_STOPWORDS_TT, header=None)
 ru_stopwords = pd.read_csv(PATH_STOPWORDS_RU, header=None)
+en_stopwords = pd.read_csv(PATH_STOPWORDS_EN, header=None)
 interim_stopwords = pd.read_csv(PATH_STOPWORDS_INTERIM, header=None)
 
-
-STOPWORDS = pd.DataFrame().append([tt_stopwords, ru_stopwords, interim_stopwords])
+STOPWORDS = pd.DataFrame().append([tt_stopwords, ru_stopwords, en_stopwords, interim_stopwords])
+STOPWORDS = STOPWORDS.values
+# STOPWORDS = tuple(STOPWORDS.values)
 
 URL_EXP = r'(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})'
 russian_stemmer = SnowballStemmer('russian')
@@ -81,14 +84,16 @@ def preprocess_document(text, stem=False, lemm=False):
 
 
 def preprocess(documents, stem=False, lemm=False):
-    return [preprocess_document(str(doc), stem, lemm) for doc in tqdm(documents)]
+    return [preprocess_document(str(doc), stem, lemm) for doc in tqdm(documents, desc='Preprocessing')]
 
 
-df = pd.read_csv(PATH / 'data/raw/total.csv')
-df['preproc'] = preprocess(df['content'], stem=False, lemm=False)
-words = [x for d in df['preproc'] for x in nltk.word_tokenize(d)]
-cnt = Counter(words)
-df.to_csv(PATH / 'data/processed/total.csv')
+if __name__ == '__main__':
+    df = pd.read_csv(PATH / 'data/raw/contents.csv')
+    df['preproc'] = preprocess(df['content'], stem=False, lemm=False)
 
-for x in dict(cnt.most_common(100)).items():
-    print(x)
+    words = [x for d in df['preproc'] for x in nltk.word_tokenize(d)]
+    cnt = Counter(words)
+    df.to_csv(PATH / 'data/processed/contents.csv')
+
+    for x in dict(cnt.most_common(100)).items():
+        print(x)

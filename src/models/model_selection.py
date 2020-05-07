@@ -17,7 +17,7 @@ from src.visualization.visualize import plot_scatter
 from src.data.preprocess import preprocess, STOPWORDS
 
 SEED = 5
-MAX_TOPICS = 25
+MAX_TOPICS = 35
 AFFINITY = 'euclidean'
 
 
@@ -33,6 +33,7 @@ class Scores(enum.Enum):
 def main(documents, vect_model, true_labels):
     topics_count = list(range(3, MAX_TOPICS + 1, 3))
     grid_search_res = {score: defaultdict(list) for score in Scores}
+    term_doc_matrix = vect_model.fit_transform(documents)
 
     for topics in tqdm(topics_count, desc='topics_count'):
         lda = LDA(n_components=topics,
@@ -42,7 +43,6 @@ def main(documents, vect_model, true_labels):
                   verbose=0,
                   random_state=SEED)
 
-        term_doc_matrix = vect_model.transform(documents)
         embeddings = lda.fit_transform(term_doc_matrix)
         X = StandardScaler().fit_transform(embeddings)
 
@@ -78,11 +78,11 @@ def main(documents, vect_model, true_labels):
     for metric_name in grid_search_res:
         if len(grid_search_res[metric_name]) == 0:
             continue
-        print(metric_name.upper())
+        print(metric_name.name.upper())
         plot_scatter(x=topics_count,
                      ys=list(grid_search_res[metric_name].values()),
                      labels=list(grid_search_res[metric_name].keys()),
-                     title=metric_name,
+                     title=metric_name.name,
                      xaxis='num_topics',
                      yaxis='score')
 
@@ -90,18 +90,21 @@ def main(documents, vect_model, true_labels):
 PATH_TOTAL_RAW = Path('data/raw/total.csv')
 PATH_TOTAL_PROCESSED = Path('data/processed/total.csv')
 
-if __name__ == '__main__':
-    df = pd.read_csv(PATH_TOTAL_RAW, sep=',')
-    print(df.columns)
-    true_labels = df['topic']
-    documents = df['title'] + ' ' + df['content']
-    if 'preproc' not in df.columns:
-        documents = preprocess(documents.values, stem=True, lemm=False)
-        df['preproc'] = documents
-        df.to_csv(PATH_TOTAL_PROCESSED, sep=',', index=False)
+PATH = Path(os.getcwd())
+filename = 'contents.csv'
+if filename in os.listdir(PATH / 'data/processed'):
+    df = pd.read_csv(PATH / 'data/processed' / filename)
+else:
+    df = pd.read_csv(PATH / 'data/raw' / filename)
+    df['preproc'] = preprocess(df['content'].values, stem=True, lemm=False)
+    df.to_csv(PATH / 'data/processed' / filename)
+df.dropna(inplace=True)
 
-    count_vect = CountVectorizer(input='content', stop_words=STOPWORDS)
-    tf_idf_vect = TfidfVectorizer(input='content', stop_words=STOPWORDS)
-    vect_model = count_vect
-    data_vectorized = vect_model.fit_transform(documents)
-    main(documents, vect_model, true_labels=true_labels)  # TODO try to change
+df = df[df['title'].str.len() > 1]  # remove articles about letters
+documents = df['preproc'].values  # .astype('U')
+print(type(documents), type(STOPWORDS))
+count_vect = CountVectorizer(input='content')  # , stop_words=STOPWORDS)
+tf_idf_vect = TfidfVectorizer(input='content')  # , stop_words=STOPWORDS)
+vect_model = count_vect
+
+main(list(documents), vect_model, true_labels=df['topic'])

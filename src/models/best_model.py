@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 
+from tqdm import tqdm
 from pathlib import Path
 from sklearn import metrics
 from sklearn.manifold import TSNE
@@ -17,10 +18,10 @@ from src.visualization.visualize import plot_hist
 from src.data.preprocess import preprocess, STOPWORDS
 
 SEED = 5
-TOPICS = 5
+TOPICS = 13
 
 
-def plot(vect_model, names, true_labels, use_true=False):
+def plot(documents, vect_model, names, true_labels, use_true=False):
     true_label_to_id = OrderedDict([(x, i) for i, x in enumerate(sorted(set(true_labels)))])
     true_id_to_label = OrderedDict([(i, x) for i, x in enumerate(sorted(set(true_labels)))])
     true_labels = np.array([true_label_to_id[x] for x in true_labels])
@@ -33,10 +34,10 @@ def plot(vect_model, names, true_labels, use_true=False):
               random_state=SEED,
               learning_decay=0.7)
 
-    data_vectorized = vect_model.fit_transform(documents.values.astype('U'))
+    data_vectorized = vect_model.fit_transform(list(documents))
     embeddings = lda.fit_transform(data_vectorized)
 
-    for metric in ['cosine', 'euclidean', 'manhattan']:
+    for metric in tqdm(['cosine', 'euclidean', 'manhattan']):
         X = StandardScaler().fit_transform(embeddings)
 
         tSNE = TSNE(n_components=2,
@@ -102,7 +103,7 @@ def topics_distribution(documents, vect_model):
               random_state=SEED,
               learning_decay=0.7)
 
-    data_vectorized = vect_model.fit_transform(documents.values.astype('U'))
+    data_vectorized = vect_model.fit_transform(documents)
     lda.fit(data_vectorized)
     topic_modeler = TopicModeler(vect_model, lda)
     prob = [topic_modeler(doc) for doc in documents]
@@ -113,21 +114,21 @@ def topics_distribution(documents, vect_model):
 
 
 PATH = Path(os.getcwd())
-filename = 'total.csv'
+filename = 'contents.csv'
 if filename in os.listdir(PATH / 'data/processed'):
     df = pd.read_csv(PATH / 'data/processed' / filename)
 else:
     df = pd.read_csv(PATH / 'data/raw' / filename)
     df['preproc'] = preprocess(df['content'].values, stem=True, lemm=False)
-    df.to_csv(PATH / 'data/interim/total.csv')
+    df.to_csv(PATH / 'data/processed' / filename)
 df.dropna(inplace=True)
-df = df[df['topic'] != 'personas']  # remove articles about personas
-df = df[df['title'].str.len() > 1]  # remove articles about letters
-documents = df['preproc']
 
-count_vect = CountVectorizer(input='content', stop_words=STOPWORDS)
-tf_idf_vect = TfidfVectorizer(input='content', stop_words=STOPWORDS)
+df = df[df['title'].str.len() > 1]  # remove articles about letters
+documents = df['preproc'].values#.astype('U')
+
+count_vect = CountVectorizer(input='content')#, stop_words=STOPWORDS)
+tf_idf_vect = TfidfVectorizer(input='content')#, stop_words=STOPWORDS)
 vect_model = count_vect
 
-# plot(vect_model, df['title'], df['topic'], use_true=True)
+plot(documents, vect_model, df['title'], df['topic'], use_true=True)
 topics_distribution(documents, vect_model)
