@@ -87,7 +87,7 @@ def main(documents, vect_model, true_labels):
                      yaxis='score')
 
 
-PATH_TOTAL_RAW = Path('data/raw/total.csv')
+PATH_TOTAL_RAW = Path('data/processed/total.csv')
 PATH_TOTAL_PROCESSED = Path('data/processed/total.csv')
 
 if __name__ == '__main__':
