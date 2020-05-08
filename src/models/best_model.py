@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objs as go
 
 from tqdm import tqdm
@@ -19,6 +20,10 @@ from src.data.preprocess import preprocess, STOPWORDS
 
 SEED = 5
 TOPICS = 13
+PERPLEXITY = 35
+COLORMAP = px.colors.qualitative.Light24
+COLORMAP = [COLORMAP[i] for i in
+            (0, 1, 2, 3, 5, 6, 7, 8, 10, 12, 13, 14, 15, 16, 17, 18, 21, 22)]
 
 
 def plot(documents, vect_model, names, true_labels, use_true=False):
@@ -30,20 +35,21 @@ def plot(documents, vect_model, names, true_labels, use_true=False):
               max_iter=30,
               n_jobs=6,
               learning_method='batch',
-              # verbose=1,
+              verbose=0,
               random_state=SEED,
               learning_decay=0.7)
 
     data_vectorized = vect_model.fit_transform(list(documents))
     embeddings = lda.fit_transform(data_vectorized)
 
-    for metric in tqdm(['cosine', 'euclidean', 'manhattan']):
+    for metric in tqdm(['cosine']):  # , 'euclidean', 'manhattan']):
         X = StandardScaler().fit_transform(embeddings)
 
         tSNE = TSNE(n_components=2,
                     metric=metric,
-                    perplexity=30,
+                    perplexity=PERPLEXITY,
                     n_jobs=-1,
+                    init='random',
                     random_state=SEED)
         ac = AgglomerativeClustering(n_clusters=TOPICS,
                                      linkage='average',
@@ -80,11 +86,16 @@ def plot(documents, vect_model, names, true_labels, use_true=False):
                                              mode='markers',
                                              name=id_to_label[k],
                                              marker={'size': 12,
-                                                     'symbol': 'circle-dot'},
+                                                     'symbol': 'circle',
+                                                     'opacity': 0.8,
+                                                     'line': {'width': 1,
+                                                              'color': 'SlateGrey'},
+                                                     'color': COLORMAP[(len(COLORMAP) + k) % len(COLORMAP)]
+                                                     },
                                              hovertext=np.array(names)[class_member_mask]
                                              ))
-
-            _ = fig.update_layout(title=f'{name}. TOPICS: {TOPICS}. Metric: {metric}. True labels: {use_true}',
+            title = f'{name}. TOPICS: {TOPICS}. Metric: {metric}. Perplexity: {PERPLEXITY}. True labels: {use_true}'
+            _ = fig.update_layout(title=title,
                                   xaxis_title='x',
                                   yaxis_title='y',
                                   width=1000,
@@ -92,6 +103,7 @@ def plot(documents, vect_model, names, true_labels, use_true=False):
                                   showlegend=True,
                                   coloraxis={'colorscale': 'viridis'})
             fig.show()
+            fig.write_image('images/best_clustering.png')
 
 
 def topics_distribution(documents, vect_model):
@@ -108,7 +120,7 @@ def topics_distribution(documents, vect_model):
     topic_modeler = TopicModeler(vect_model, lda)
     prob = [topic_modeler(doc) for doc in documents]
     most_prob = [np.argmax(x) for x in prob]
-    plot_hist(most_prob, 'Topics distribution', size=(700, 500))
+    plot_hist(most_prob, 'Topics distribution', size=(700, 500), file='best_topics_distribution')
     most_prob_cnt = Counter(most_prob)
     print(most_prob_cnt)
 
@@ -119,15 +131,15 @@ if filename in os.listdir(PATH / 'data/processed'):
     df = pd.read_csv(PATH / 'data/processed' / filename)
 else:
     df = pd.read_csv(PATH / 'data/raw' / filename)
-    df['preproc'] = preprocess(df['content'].values, lemm=True)
+    df['preproc'] = preprocess(df['content'].values, stem=True)
     df.to_csv(PATH / 'data/processed' / filename)
 df.dropna(inplace=True)
 
-df = df[df['title'].str.len() > 1]  # remove articles about letters
-documents = df['preproc'].values#.astype('U')
+df = df[~df['title'].str.contains('Калып:')]  # remove templates
+documents = df['preproc'].values
 
-count_vect = CountVectorizer(input='content')#, stop_words=STOPWORDS)
-tf_idf_vect = TfidfVectorizer(input='content')#, stop_words=STOPWORDS)
+count_vect = CountVectorizer(input='content')  # , stop_words=STOPWORDS)
+tf_idf_vect = TfidfVectorizer(input='content')  # , stop_words=STOPWORDS)
 vect_model = count_vect
 
 plot(documents, vect_model, df['title'], df['topic'], use_true=True)

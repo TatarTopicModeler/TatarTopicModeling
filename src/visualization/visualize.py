@@ -9,7 +9,7 @@ def layout(title_raw, width, height):
                      margin=dict(l=65, r=50, b=65, t=90))
 
 
-def plot_hist(data, title, histnorm=None, size: Tuple = None):
+def plot_hist(data, title, histnorm=None, size: Tuple = None, file=None):
     def hist(x):
         return [go.Histogram(x=x, histnorm=histnorm)]
 
@@ -19,9 +19,11 @@ def plot_hist(data, title, histnorm=None, size: Tuple = None):
         width, height = (600, 600)
     fig = go.Figure(data=hist(data), layout=layout(title, width, height))
     iplot(fig)
+    if file is not None:
+        fig.write_image(f'images/{file}.png')
 
 
-def plot_bar(x, y, title, size: Tuple = None):
+def plot_bar(x, y, title, size: Tuple=None, file=None):
     def bar(x, y):
         return [go.Bar(x=x, y=y)]
 
@@ -31,9 +33,11 @@ def plot_bar(x, y, title, size: Tuple = None):
         width, height = (600, 600)
     fig = go.Figure(data=bar(x, y), layout=layout(title, width, height))
     iplot(fig)
+    if file is not None:
+        fig.write_image(f'images/{file}.png')
 
 
-def plot_scatter(x, ys, labels, title, xaxis='', yaxis=''):
+def plot_scatter(x, ys, labels, title, xaxis='', yaxis='', file=None):
     fig = go.Figure()
     _ = fig.update_layout(title=title,
                           xaxis_title=xaxis,
@@ -43,3 +47,5 @@ def plot_scatter(x, ys, labels, title, xaxis='', yaxis=''):
                                      mode='lines+markers',
                                      name=labels[i]))
     fig.show()
+    if file is not None:
+        fig.write_image(f'images/{file}.png')

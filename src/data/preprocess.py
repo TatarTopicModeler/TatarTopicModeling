@@ -1,4 +1,5 @@
 from nltk.stem import SnowballStemmer, WordNetLemmatizer
+from src.data.tatar_stemming import tatar_stemmer
 from collections import Counter
 from pathlib import Path
 from tqdm import tqdm
@@ -32,7 +33,7 @@ english_stemmer = SnowballStemmer('english')
 EN_ALPHA_REGEX = r'a-z'
 RU_ALPHA_REGEX = r'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'
 TT_ALPHA_REGEX = r'аәбвгдеёжҗзийклмнңоөпрстуүфхһцчшщъыьэюя'
-TT_LATIN_ALPHA_REGEX = r'abcdefghijklmnopqrstuvwxyzäççñöüüğışş'
+TT_LATIN_ALPHA_REGEX = r'abcdefghijklmnopqrstuvwxyzäççñöüüğışş\''
 ALPHA_REGEX = EN_ALPHA_REGEX + TT_ALPHA_REGEX + RU_ALPHA_REGEX + EN_ALPHA_REGEX
 
 PUNCT = r'''!"#$%&\'()*+,-./:;<=>?@\\][^_`{|}~«»—“”•'''  # punctuation marks
@@ -104,13 +105,19 @@ def is_english(word):
     return sum([int(char in EN_ALPHA_REGEX) for char in word]) >= len(word) // 2
 
 
-def is_latin_tatar(text):
-    return sum([int(char in TT_LATIN_ALPHA_REGEX) for char in text]) >= len(text) * 0.8
+def is_latin_tatar_text(text):
+    words = nltk.word_tokenize(text)
+    total = sum([len(word) for word in words])
+    latin = sum([
+        sum([(char in TT_LATIN_ALPHA_REGEX) for char in word])
+        for word in words
+    ])
+    return latin / total >= 0.6
 
 
-def stemming(words):  # TODO adapt for tatar (implement a new one or find edit distance with dictionary word
+def stemming(words):
     return [
-        english_stemmer.stem(word) if is_english(word) else russian_stemmer.stem(word)
+        english_stemmer.stem(word) if is_english(word) else tatar_stemmer(word)
         for word in words
     ]
 
@@ -122,44 +129,32 @@ def translit(text):
     return text
 
 
-def tatar_lemmatize(word):
-    # TODO implement
-    return ''
-
-def lemmatize(word):
-    if is_english(word):
-        return wnl.lemmatize(words)
-    return tatar_lemmatize(word)
-
-
 def remove_stopwords(words):
     return [word for word in words if word not in STOPWORDS]
 
 
-def preprocess_document(text, stem=False, lemm=False):
+def preprocess_document(text, stem=False):
     text = text.lower()
-    if is_latin_tatar(text):
+    if is_latin_tatar_text(text):
         text = translit(text)
-    text = normalize(text)
 
+    text = normalize(text)
     words = nltk.word_tokenize(text)
     words = remove_stopwords(words)
     if stem:
-        raise 'probably bad idea'
         words = stemming(words)
-    if lemm:
-        words = [lemmatize(word) for word in text]
+    words = remove_stopwords(words)
     words = [word for word in words if len(word) > 1]
     return ' '.join(words)
 
 
-def preprocess(documents, stem=False, lemm=False):
-    return [preprocess_document(str(doc), stem, lemm) for doc in tqdm(documents, desc='Preprocessing')]
+def preprocess(documents, stem=False):
+    return [preprocess_document(str(doc), stem) for doc in tqdm(documents, desc='Preprocessing')]
 
 
 if __name__ == '__main__':
     df = pd.read_csv(PATH / 'data/raw/contents.csv')
-    df['preproc'] = preprocess(df['content'], lemm=True)
+    df['preproc'] = preprocess(df['content'], stem=True)
 
     words = [x for d in df['preproc'] for x in nltk.word_tokenize(d)]
     cnt = Counter(words)

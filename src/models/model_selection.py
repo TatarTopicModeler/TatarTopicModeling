@@ -17,7 +17,7 @@ from src.visualization.visualize import plot_scatter
 from src.data.preprocess import preprocess, STOPWORDS
 
 SEED = 5
-MAX_TOPICS = 35
+MAX_TOPICS = 36
 AFFINITY = 'euclidean'
 
 
@@ -31,7 +31,7 @@ class Scores(enum.Enum):
 
 
 def main(documents, vect_model, true_labels):
-    topics_count = list(range(3, MAX_TOPICS + 1, 3))
+    topics_count = list(range(4, MAX_TOPICS + 1, 3))
     grid_search_res = {score: defaultdict(list) for score in Scores}
     term_doc_matrix = vect_model.fit_transform(documents)
 
@@ -84,7 +84,8 @@ def main(documents, vect_model, true_labels):
                      labels=list(grid_search_res[metric_name].keys()),
                      title=metric_name.name,
                      xaxis='num_topics',
-                     yaxis='score')
+                     yaxis='score',
+                     file=None)  # f'selection_{metric_name}')
 
 
 PATH_TOTAL_RAW = Path('data/processed/total.csv')
@@ -96,15 +97,16 @@ if filename in os.listdir(PATH / 'data/processed'):
     df = pd.read_csv(PATH / 'data/processed' / filename)
 else:
     df = pd.read_csv(PATH / 'data/raw' / filename)
-    df['preproc'] = preprocess(df['content'].values, lemm=True)
+    df['preproc'] = preprocess(df['content'].values, stem=True)
     df.to_csv(PATH / 'data/processed' / filename)
+
 df.dropna(inplace=True)
 
-df = df[df['title'].str.len() > 1]  # remove articles about letters
-documents = df['preproc'].values  # .astype('U')
-print(type(documents), type(STOPWORDS))
+df = df[~df['title'].str.contains('Калып:')]  # remove templates
+documents = df['preproc'].values
+
 count_vect = CountVectorizer(input='content')  # , stop_words=STOPWORDS)
 tf_idf_vect = TfidfVectorizer(input='content')  # , stop_words=STOPWORDS)
 vect_model = count_vect
 
-main(list(documents), vect_model, true_labels=df['topic'])
+main(documents, vect_model, true_labels=df['topic'])
