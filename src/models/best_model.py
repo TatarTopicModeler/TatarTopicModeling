@@ -119,7 +119,7 @@ if filename in os.listdir(PATH / 'data/processed'):
     df = pd.read_csv(PATH / 'data/processed' / filename)
 else:
     df = pd.read_csv(PATH / 'data/raw' / filename)
-    df['preproc'] = preprocess(df['content'].values, stem=True, lemm=False)
+    df['preproc'] = preprocess(df['content'].values, lemm=True)
     df.to_csv(PATH / 'data/processed' / filename)
 df.dropna(inplace=True)
 

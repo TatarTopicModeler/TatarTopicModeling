@@ -83,6 +83,7 @@ TRANSLIT_RULES = {
     'ı': 'ы',
     '\'': '',  # (э, ъ, ь)
 }
+wnl = WordNetLemmatizer()
 
 
 def remove_stress(text, ignore='йё'):
@@ -121,8 +122,14 @@ def translit(text):
     return text
 
 
-def lemmatize(text):  # TODO не работает
-    return WordNetLemmatizer().lemmatize(text, pos='v')
+def tatar_lemmatize(word):
+    # TODO implement
+    return ''
+
+def lemmatize(word):
+    if is_english(word):
+        return wnl.lemmatize(words)
+    return tatar_lemmatize(word)
 
 
 def remove_stopwords(words):
@@ -132,15 +139,13 @@ def remove_stopwords(words):
 def preprocess_document(text, stem=False, lemm=False):
     text = text.lower()
     if is_latin_tatar(text):
-        print(text)
         text = translit(text)
-        print(text)
-        print()
     text = normalize(text)
 
     words = nltk.word_tokenize(text)
     words = remove_stopwords(words)
     if stem:
+        raise 'probably bad idea'
         words = stemming(words)
     if lemm:
         words = [lemmatize(word) for word in text]
@@ -154,7 +159,7 @@ def preprocess(documents, stem=False, lemm=False):
 
 if __name__ == '__main__':
     df = pd.read_csv(PATH / 'data/raw/contents.csv')
-    df['preproc'] = preprocess(df['content'], stem=False, lemm=False)
+    df['preproc'] = preprocess(df['content'], lemm=True)
 
     words = [x for d in df['preproc'] for x in nltk.word_tokenize(d)]
     cnt = Counter(words)
