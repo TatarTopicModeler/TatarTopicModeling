@@ -10,6 +10,7 @@ from sklearn import metrics
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.model_selection import train_test_split
 from sklearn.decomposition import LatentDirichletAllocation as LDA
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
@@ -27,10 +28,6 @@ COLORMAP = [COLORMAP[i] for i in
 
 
 def plot(documents, vect_model, names, true_labels, use_true=False):
-    true_label_to_id = OrderedDict([(x, i) for i, x in enumerate(sorted(set(true_labels)))])
-    true_id_to_label = OrderedDict([(i, x) for i, x in enumerate(sorted(set(true_labels)))])
-    true_labels = np.array([true_label_to_id[x] for x in true_labels])
-
     lda = LDA(n_components=TOPICS,
               max_iter=30,
               n_jobs=6,
@@ -39,11 +36,36 @@ def plot(documents, vect_model, names, true_labels, use_true=False):
               random_state=SEED,
               learning_decay=0.7)
 
+    true_label_to_id = OrderedDict([(x, i) for i, x in enumerate(sorted(set(true_labels)))])
+    true_id_to_label = OrderedDict([(i, x) for i, x in enumerate(sorted(set(true_labels)))])
+    true_labels = np.array([true_label_to_id[x] for x in true_labels])
     data_vectorized = vect_model.fit_transform(list(documents))
-    embeddings = lda.fit_transform(data_vectorized)
+
+    X_train, X_test, y_train, y_test, names_train, names_test = train_test_split(data_vectorized, true_labels, names,
+                                                                                 random_state=SEED)
+
+    use_all = True
+    if use_all:
+        embeddings = lda.fit_transform(data_vectorized)
+    else:
+        data_vectorized = X_train
+        embeddings = lda.fit_transform(data_vectorized)
+        embeddings = lda.transform(X_test)
+        true_labels = y_test
+        names = names_test
+
+    embeddings_df = pd.DataFrame(embeddings)
+    metadata_df = pd.DataFrame({
+        'true': true_labels,
+        'pred': np.argmax(embeddings, axis=1)
+    })
+    embeddings_df.to_csv(PATH / 'data/processed/lda_embeddings.tsv', sep='\t', index=False, header=False)
+    metadata_df.to_csv(PATH / 'data/processed/lda_labels.tsv', sep='\t', index=False)
+
+    print(len(embeddings), len(true_labels))
 
     for metric in tqdm(['cosine']):  # , 'euclidean', 'manhattan']):
-        X = StandardScaler().fit_transform(embeddings)
+        X = embeddings
 
         tSNE = TSNE(n_components=2,
                     metric=metric,
@@ -62,12 +84,14 @@ def plot(documents, vect_model, names, true_labels, use_true=False):
 
         labels_variants = [
             ('LDA labels', lda_labels, X),
-            # ('CLUSTERING labels', clust_labels, X)
+            ('CLUSTERING labels', clust_labels, X)
         ]
+
         for name, labels, X in labels_variants:
             print('=' * 20)
             print(name, metric)
-            print("Silhouette Coefficient: %0.3f" % metrics.silhouette_score(X, labels, metric=metric), '\n')
+            print("Silhouette Coefficient: %0.3f" % metrics.silhouette_score(X, labels, metric=metric))
+            print("Perplexity: %0.3f" % lda.perplexity(data_vectorized), '\n')
             X = tSNE.fit_transform(X)
 
             if use_true:
@@ -94,16 +118,21 @@ def plot(documents, vect_model, names, true_labels, use_true=False):
                                                      },
                                              hovertext=np.array(names)[class_member_mask]
                                              ))
-            title = f'{name}. TOPICS: {TOPICS}. Metric: {metric}. Perplexity: {PERPLEXITY}. True labels: {use_true}'
-            _ = fig.update_layout(title=title,
-                                  xaxis_title='x',
-                                  yaxis_title='y',
+            title = f'{name}. Topics: {TOPICS}. Metric: {metric}. ' \
+                    f'Perplexity: {PERPLEXITY}. Data: {"all" if use_all else "test"}'
+            _ = fig.update_layout(title=dict(text=title,
+                                             font=dict(size=25)),
+                                  legend=dict(y=-0.2,
+                                              yanchor='bottom',
+                                              orientation='h',
+                                              font=dict(size=18)),
+                                  xaxis=dict(title=None),
+                                  coloraxis=dict(colorscale='viridis'),
                                   width=1000,
-                                  height=1000,
-                                  showlegend=True,
-                                  coloraxis={'colorscale': 'viridis'})
+                                  height=1000
+                                  )
             fig.show()
-            fig.write_image('images/best_clustering.png')
+            #  fig.write_image(f'reports/figures/{best_clustering}.png')
 
 
 def topics_distribution(documents, vect_model):
@@ -135,6 +164,13 @@ else:
     df.to_csv(PATH / 'data/processed' / filename)
 df.dropna(inplace=True)
 
+translation = {
+    'астрономия': 'astronomy', 'биология': 'biology', 'химия': 'chemistry',
+    'физика': 'physics', 'математика': 'math', 'география': 'geography', 'тарих': 'history',
+    'әдәбият': 'literature', 'фәлсәфә': 'philosophy', 'психология': 'psychology',
+    'сәясәт': 'politics', 'икътисад': 'economics', 'хокук': 'jurisprudence'
+}
+
 df = df[~df['title'].str.contains('Калып:')]  # remove templates
 documents = df['preproc'].values
 
@@ -142,5 +178,8 @@ count_vect = CountVectorizer(input='content')  # , stop_words=STOPWORDS)
 tf_idf_vect = TfidfVectorizer(input='content')  # , stop_words=STOPWORDS)
 vect_model = count_vect
 
-plot(documents, vect_model, df['title'], df['topic'], use_true=True)
+topics = df['topic'].values
+topics = [translation[t] for t in topics]
+names = df['title']
+plot(documents, vect_model, names, topics, use_true=True)
 topics_distribution(documents, vect_model)
